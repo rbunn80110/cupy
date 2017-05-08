@@ -1,9 +1,9 @@
 import hashlib
 import os
 import re
+import shutil
 import tempfile
 
-import filelock
 from pynvrtc import compiler
 import six
 
@@ -100,8 +100,6 @@ def compile_with_cache(source, options=(), arch=None, cache_dir=None):
         pp_src = pp_src.encode('utf-8')
     name = '%s.cubin' % hashlib.md5(pp_src).hexdigest()
 
-    mod = function.Module()
-
     if not os.path.isdir(cache_dir):
         try:
             os.makedirs(cache_dir)
@@ -109,20 +107,27 @@ def compile_with_cache(source, options=(), arch=None, cache_dir=None):
             if not os.path.isdir(cache_dir):
                 raise
 
-    lock_path = os.path.join(cache_dir, 'lock_file.lock')
-
+    mod = function.Module()
     path = os.path.join(cache_dir, name)
-    with filelock.FileLock(lock_path) as lock:
-        if os.path.exists(path):
-            with open(path, 'rb') as file:
-                cubin = file.read()
-        else:
-            lock.release()
-            cubin = nvrtc(source, options, arch)
-            lock.acquire()
-            with open(path, 'wb') as cubin_file:
-                cubin_file.write(cubin)
+    if os.path.exists(path):
+        with open(path, 'rb') as file:
+            data = file.read()
+        if len(data) >= 32:
+            hash = data[:32]
+            cubin = data[32:]
+            cubin_hash = six.b(hashlib.md5(cubin).hexdigest())
+            if hash == cubin_hash:
+                mod.load(cubin)
+                return mod
+
+    cubin = nvrtc(source, options, arch)
+    cubin_hash = six.b(hashlib.md5(cubin).hexdigest())
+
+    with tempfile.NamedTemporaryFile(dir=cache_dir, delete=False) as tf:
+        tf.write(cubin_hash)
+        tf.write(cubin)
+        temp_path = tf.name
+    shutil.move(temp_path, path)
 
     mod.load(cubin)
-
     return mod
