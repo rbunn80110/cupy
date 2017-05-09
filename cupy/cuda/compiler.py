@@ -98,7 +98,7 @@ def compile_with_cache(source, options=(), arch=None, cache_dir=None):
 
     if isinstance(pp_src, six.text_type):
         pp_src = pp_src.encode('utf-8')
-    name = '%s.cubin' % hashlib.md5(pp_src).hexdigest()
+    name = '%s_2.cubin' % hashlib.md5(pp_src).hexdigest()
 
     if not os.path.isdir(cache_dir):
         try:
